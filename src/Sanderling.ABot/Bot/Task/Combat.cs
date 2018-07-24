@@ -77,14 +77,21 @@ namespace Sanderling.ABot.Bot.Task
 				var scanActuallyAnomaly =
 					probeScannerWindow?.ScanResultView?.Entry?.FirstOrDefault(ActuallyAnomaly);
 
+				var Broken = memoryMeasurement?.WindowOverview?.FirstOrDefault()?.ListView?.Entry
+  					?.Where(entry => entry?.Name?.RegexMatchSuccessIgnoreCase("Broken|Pirate") ?? false)
+  					?.OrderBy(entry => entry?.DistanceMax ?? int.MaxValue)
+  					?.ToArray();
+
+
+				//if (memoryMeasurement?.ShipUi.SpeedMilli < 100000)
+				//	yield return Broken.FirstOrDefault().ClickMenuEntryByRegexPattern(bot,"Orbit", "30km");
+					
 				if (listOverviewDreadCheck.Count() > 0)
 				{
 					yield return new RetreatTask { Bot = bot };
 				}
 				else
 				{
-
-
 
 					if (listOverviewEntryToAttack.Count() > 0)
 					{
@@ -200,7 +207,7 @@ namespace Sanderling.ABot.Bot.Task
 						if (NPCtargheted == null)
 						{
 							if (ShipManeuverStatus != ShipManeuverTypeEnum.Orbit)
-								yield return new OrbitTarghet { target = overviewEntryLockTarget, targetLocked = null };
+								yield return new OrbitTarghet { target = Broken.FirstOrDefault(), targetLocked = null };
 							if (overviewEntryLockTarget.DistanceMax < 60000)
 								yield return new LockTarghet { target = overviewEntryLockTarget };
 						}
@@ -272,7 +279,7 @@ namespace Sanderling.ABot.Bot.Task
 			get
 			{
 
-				var maiuscKEY = VirtualKeyCode.SHIFT;
+				var maiuscKEY = VirtualKeyCode.VK_W;
 
 				yield return maiuscKEY.KeyDown();
 
