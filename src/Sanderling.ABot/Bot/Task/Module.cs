@@ -3,6 +3,7 @@ using Sanderling.Accumulation;
 using Sanderling.Motor;
 using System.Collections.Generic;
 using System.Linq;
+using WindowsInput.Native;
 
 namespace Sanderling.ABot.Bot.Task
 {
@@ -31,10 +32,31 @@ namespace Sanderling.ABot.Bot.Task
 			return new ModuleToggleTask { bot = bot, module = module };
 		}
 
+		public static IBotTask DeactiveModule(
+			this Bot bot,
+			IShipUiModule module)
+		{
+			if (module?.IsActive(bot) == false || module?.RampActive == false)
+			{
+				return null;
+			}
+			else
+			{
+				return new ModuleToggleTask { bot = bot, module = module };
+			}
+		}
+
+
+
 		static public IBotTask EnsureIsActive(
 			this Bot bot,
 			IEnumerable<IShipUiModule> setModule) =>
 			new BotTask { Component = setModule?.Select(module => bot?.EnsureIsActive(module)) };
+
+		public static IBotTask DeactivateModule(
+			this Bot bot,
+			IEnumerable<IShipUiModule> setModule) =>
+			new BotTask { Component = setModule?.Select(module => bot?.DeactiveModule(module)) };
 	}
 
 	public class ModuleToggleTask : IBotTask
@@ -56,6 +78,21 @@ namespace Sanderling.ABot.Bot.Task
 
 				yield return module?.MouseClick(MouseButtonIdEnum.Left);
 			}
+		}
+
+		public IBotTask ReloadAnomaly()
+		{
+			var ReloadAnomalyFactory = new BotTask { Component = null, Effects = ReloadAnomalyFunction() };
+			return ReloadAnomalyFactory;
+		}
+
+
+		public IEnumerable<MotionParam> ReloadAnomalyFunction()
+		{
+			var APPS = VirtualKeyCode.APPS;
+
+			yield return APPS.KeyboardPress();
+			yield return APPS.KeyboardPress();
 		}
 	}
 }

@@ -13,6 +13,9 @@ namespace Sanderling.ABot.Bot
 {
 	public class Bot
 	{
+		public bool OwnAnomaly { private set; get; }
+		public bool SkipAnomaly { private set; get; }
+
 		static public readonly Func<Int64> GetTimeMilli = Bib3.Glob.StopwatchZaitMiliSictInt;
 
 		public BotStepInput StepLastInput { private set; get; }
@@ -46,8 +49,17 @@ namespace Sanderling.ABot.Bot
 		}
 
 		public Int64? ToggleLastAgeStepCountFromModule(Accumulation.IShipUiModule module) =>
-			module == null ? null :
 			stepIndex - ToggleLastStepIndexFromModule?.TryGetValueNullable(module);
+
+		public void SetOwnAnomaly(bool value)
+		{
+			OwnAnomaly = value;
+		}
+
+		public void SetSkipAnomaly(bool value)
+		{
+			SkipAnomaly = value;
+		}
 
 		IEnumerable<IBotTask[]> StepOutputListTaskPath() =>
 			((IBotTask)new BotTask { Component = RootTaskListComponent() })
