@@ -82,9 +82,11 @@ namespace Sanderling.ABot.Bot.Task
   					?.OrderBy(entry => entry?.DistanceMax ?? int.MaxValue)
   					?.ToArray();
 
-
-				//if (memoryMeasurement?.ShipUi.SpeedMilli < 100000)
-				//	yield return Broken.FirstOrDefault().ClickMenuEntryByRegexPattern(bot,"Orbit", "30km");
+				var PopupWindow = memoryMeasurement?.WindowTelecom?.FirstOrDefault(win => win?.Caption.RegexMatchSuccessIgnoreCase("information") ?? false);
+				var PopButton = PopupWindow.ButtonText?.FirstOrDefault(button => (button.Text).RegexMatchSuccessIgnoreCase("close|no|ok"));
+				if (PopButton != null) {
+					yield return PopButton.ClickMenuEntryByRegexPattern(bot, "close|no|ok");
+						}
 					
 				if (listOverviewDreadCheck.Count() > 0)
 				{
