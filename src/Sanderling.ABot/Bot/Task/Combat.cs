@@ -7,16 +7,18 @@ using System;
 using Sanderling.Interface.MemoryStruct;
 using Sanderling.ABot.Parse;
 using Bib3;
+using WindowsInput.Native;
 
 namespace Sanderling.ABot.Bot.Task
 {
 	public class CombatTask : IBotTask
 	{
-		const int TargetCountMax = 4;
+		const int TargetCountMax = 3;
 
 		public Bot bot;
 
 		public bool Completed { private set; get; }
+
 
 		public IEnumerable<IBotTask> Component
 		{
@@ -30,11 +32,10 @@ namespace Sanderling.ABot.Bot.Task
 				if (!memoryMeasurement.ManeuverStartPossible())
 					yield break;
 
+				var targetingRangeDistance = (bot?.ConfigSerialAndStruct.Value?.TargetingRangeKM ?? 30) * 1000;
+
 				var listOverviewEntryToAttack =
-					memoryMeasurement?.WindowOverview?.FirstOrDefault()?.ListView?.Entry?.Where(entry => entry?.MainIcon?.Color?.IsRed() ?? false)
-					?.OrderBy(entry => bot.AttackPriorityIndex(entry))
-					?.ThenBy(entry => entry?.DistanceMax ?? int.MaxValue)
-					?.ToArray();
+					bot.SortTargets(memoryMeasurement?.WindowOverview?.FirstOrDefault()?.ListView?.Entry);
 
 				var targetSelected =
 					memoryMeasurement?.Target?.FirstOrDefault(target => target?.IsSelected ?? false);
@@ -44,12 +45,6 @@ namespace Sanderling.ABot.Bot.Task
 
 				var setModuleWeapon =
 					memoryMeasurementAccu?.ShipUiModule?.Where(module => module?.TooltipLast?.Value?.IsWeapon ?? false);
-
-				if (null != targetSelected)
-					if (shouldAttackTarget)
-						yield return bot.EnsureIsActive(setModuleWeapon);
-					else
-						yield return targetSelected.ClickMenuEntryByRegexPattern(bot, "unlock");
 
 				var droneListView = memoryMeasurement?.WindowDroneView?.FirstOrDefault()?.ListView;
 
@@ -74,24 +69,76 @@ namespace Sanderling.ABot.Bot.Task
 				var droneInLocalSpaceIdle =
 					droneInLocalSpaceSetStatus?.Any(droneStatus => droneStatus.RegexMatchSuccessIgnoreCase("idle")) ?? false;
 
-				if (shouldAttackTarget)
-				{
-					if (0 < droneInBayCount && droneInLocalSpaceCount < 5)
-						yield return droneGroupInBay.ClickMenuEntryByRegexPattern(bot, @"launch");
+				var droneInLocalSpaceReturning =
+					droneInLocalSpaceSetStatus?.Any(droneStatus => droneStatus.RegexMatchSuccessIgnoreCase("returning")) ?? false;
 
-					if (droneInLocalSpaceIdle)
-						yield return droneGroupInLocalSpace.ClickMenuEntryByRegexPattern(bot, @"engage");
-				}
+				var overviewEntryTarget =
+					listOverviewEntryToAttack?.FirstOrDefault();
 
 				var overviewEntryLockTarget =
 					listOverviewEntryToAttack?.FirstOrDefault(entry => !((entry?.MeTargeted ?? false) || (entry?.MeTargeting ?? false)));
 
-				if (null != overviewEntryLockTarget && !(TargetCountMax <= memoryMeasurement?.Target?.Length))
-					yield return overviewEntryLockTarget.ClickMenuEntryByRegexPattern(bot, @"^lock\s*target");
+				var numCurrentTargets = listOverviewEntryToAttack?.Where(entry => ((entry?.MeTargeted ?? false) || (entry?.MeTargeting ?? false))).Count();
 
-				if (!(0 < listOverviewEntryToAttack?.Length))
-					if (0 < droneInLocalSpaceCount)
-						yield return droneGroupInLocalSpace.ClickMenuEntryByRegexPattern(bot, @"return.*bay");
+				var listOverviewEntryFriends =
+					memoryMeasurement?.WindowOverview?.FirstOrDefault().ListView?.Entry
+					?.Where(entry => (entry?.DistanceMax ?? int.MaxValue) < 150000)
+					?.Where(entry => entry?.ListBackgroundColor?.Any(bot.IsFriendBackgroundColor) ?? false)
+					?.ToArray();
+
+				var beingAttacked = listOverviewEntryToAttack?.Any(entry => entry?.IsAttackingMe ?? false) ?? false;
+
+				// Avoid anom if friend is there
+				if (droneInLocalSpaceCount == 0 && (listOverviewEntryFriends?.Length ?? 0) > 0)
+				{
+					Completed = true;
+					yield break;
+				}
+
+				if (null != targetSelected)
+					if (shouldAttackTarget)
+					{
+						if (targetSelected.Assigned == null && droneInLocalSpaceCount == 5 && (!targetSelected?.LabelText?.Any(label=> label?.Text?.RegexMatchSuccessIgnoreCase(@"pith\s") ?? false) ?? false))
+							yield return new BotTask { Effects = new[] { VirtualKeyCode.VK_F.KeyboardPress() } };
+						yield return bot.EnsureIsActive(setModuleWeapon);
+					}
+					else
+						yield return targetSelected.ClickMenuEntryByRegexPattern(bot, "unlock");
+
+				if (listOverviewEntryToAttack?.Length > 0)
+				{
+					if (0 < droneInBayCount && droneInLocalSpaceCount < 5 && beingAttacked)
+						yield return droneGroupInBay.ClickMenuEntryByRegexPattern(bot, @"launch");
+
+					if (droneInLocalSpaceIdle && shouldAttackTarget)
+						yield return new BotTask { Effects = new[] { VirtualKeyCode.VK_F.KeyboardPress() } };
+
+					if ((memoryMeasurement?.ShipUi?.Indication?.LabelText?.Any(label => label?.Text?.RegexMatchSuccessIgnoreCase(@"wreck\s") ?? false) ?? false) || memoryMeasurement?.ShipUi?.Indication?.ManeuverType != ShipManeuverTypeEnum.Orbit)
+						yield return new BotTask() { Effects = new[] {
+							// Orbit target
+							VirtualKeyCode.VK_W.KeyDown(),
+							overviewEntryTarget.MouseClick(BotEngine.Motor.MouseButtonIdEnum.Left),
+							VirtualKeyCode.VK_W.KeyUp(),
+						} };
+				}
+
+				if (null != overviewEntryLockTarget && TargetCountMax > numCurrentTargets && (overviewEntryLockTarget?.DistanceMax ?? 30000) <= targetingRangeDistance)
+					yield return new BotTask() { Effects = new[] {
+						// Lock Target
+						VirtualKeyCode.CONTROL.KeyDown(),
+						overviewEntryLockTarget.MouseClick(BotEngine.Motor.MouseButtonIdEnum.Left),
+						VirtualKeyCode.CONTROL.KeyUp(),
+					} };
+
+				if (listOverviewEntryToAttack?.Length == 0)
+					if (droneInLocalSpaceCount > 0)
+					{
+						if (!droneInLocalSpaceReturning)
+						{
+							var returnDrones = new[] { VirtualKeyCode.SHIFT, VirtualKeyCode.VK_R };
+							yield return new BotTask() { Effects = new[] { returnDrones.KeyboardPressCombined() } };
+						}
+					}
 					else
 						Completed = true;
 			}

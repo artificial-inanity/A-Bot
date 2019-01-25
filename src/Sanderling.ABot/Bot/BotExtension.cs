@@ -1,5 +1,6 @@
 ﻿using Bib3;
 using BotEngine.Common;
+using BotEngine.Interface;
 using Sanderling.ABot.Bot.Task;
 using Sanderling.Interface.MemoryStruct;
 using Sanderling.Motor;
@@ -31,6 +32,35 @@ namespace Sanderling.ABot.Bot
 			this Bot bot,
 			Sanderling.Parse.IOverviewEntry entry) =>
 			AttackPriorityIndexForOverviewEntryEWar(bot?.OverviewMemory?.SetEWarTypeFromOverviewEntry(entry));
+
+		static public Sanderling.Parse.IOverviewEntry[] SortTargets(this Bot bot, IEnumerable<Sanderling.Parse.IOverviewEntry> list) => list
+			?.Where(entry => entry?.MainIcon?.Color?.IsRed() ?? false)
+			?.Where(entry => (entry?.DistanceMax ?? int.MaxValue) < 100000)
+			?.OrderBy(entry => {
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"mortifier") ?? false) // Special cases 
+					return 1;
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"battery|tower|sentry|web|strain|splinter|render|raider|friar|reaver") ?? false) // Frigate
+					return 2;
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"coreli|centi|alvi|pithi|corpii|gistii|cleric|engraver") ?? false) // Frigate
+					return 3;
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"corelior|centior|alvior|pithior|corpior|gistior") ?? false) // Destroyer
+					return 4;
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"corelum|centum|alvum|pithum|corpum|gistum|prophet") ?? false) // Cruiser
+					return 5;
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"corelatis|centatis|alvatis|pithatis|copatis|gistatis|apostle") ?? false) // Battlecruiser
+					return 6;
+				if (entry?.Name?.RegexMatchSuccessIgnoreCase(@"core\s|centus|alvus|pith\s|corpus|gist\s") ?? false) // Battleship
+					return 7;
+				return -1;
+			})
+			?.ThenBy(entry => entry?.DistanceMax ?? int.MaxValue)
+			?.ToArray();
+
+		static public bool IsFriendBackgroundColor(this Bot bot, ColorORGB color) =>
+			(color.OMilli == 500 && color.RMilli == 0 && color.GMilli == 150 && color.BMilli == 600) || (color.OMilli == 500 && color.RMilli == 100 && color.GMilli == 600 && color.BMilli == 100);
+
+		static public bool IsEnemyBackgroundColor(this Bot bot, ColorORGB color) =>
+			(color.OMilli == 500 && color.RMilli == 750 && color.GMilli == 0 && color.BMilli == 600);
 
 		static public bool ShouldBeIncludedInStepOutput(this IBotTask task) =>
 			(task?.ContainsEffect() ?? false) || task is DiagnosticTask;
